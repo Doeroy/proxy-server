@@ -1,4 +1,5 @@
 from socket import *
+from functools import reduce
 import sys
 
 if len(sys.argv) <= 1:
@@ -32,20 +33,25 @@ while 1:
     while True:
         data = tcpCliSock.recv(4096)
         message += data
-        if "\r\n\r\n".encode("utf-8") in data:
+        if "\r\n\r\n".encode("utf-8") in message:
             break
     print(f'message: {message}')
     
     # Extract the filename from the given message
+    #print(f'Starting File name: {message.split()[1]}')
+    filename = message.split()[1].partition("/".encode('utf-8'))[2]
+    print('------------------------------------------------------------------------')
+    print(f'filename: {filename}')
+    fileExist = False
+    filetouse = filename.decode('utf-8')
+    print('File to use:', filetouse)
+    # Check wether the file exist in the cache
+    print('line: 50: ', filetouse[1:].replace("/", " "))
     try:
-        #print(f'Starting File name: {message.split()[1]}')
-        filename = message.split()[4]
-        fileExist = False
-        filetouse = filename.decode('utf-8').split(':')[0]
-        
-        print('File to use:', filetouse)
-        # Check wether the file exist in the cache
-        f = open(filetouse, "rb") # use binary mode to read the file
+        if filetouse in '/':
+            f = open(filetouse[1:].replace("/", " "), "rb") # use binary mode to read the file
+        else:
+            f = open(filetouse.replace("/", " ").strip(), "rb")
         outputdata = f.read() #reads the complete file
         fileExist = True
         
@@ -57,15 +63,15 @@ while 1:
         tcpCliSock.sendall(outputdata)
         # Fill in end.
         print('Read from cache')
-    # Error handling for file not found in cache
-
     except IOError:
         if fileExist == False:
             # Create a socket on the proxyserver
             c = socket(AF_INET, SOCK_STREAM)
-            hostn = filename.decode('utf-8')
-            print(hostn)
-            file_path = message.split('/'.encode('utf-8'))[3].split()[0].decode('utf-8')
+            hostn = message.split()[1].split('/'.encode('utf-8'))[2].decode('utf-8')
+            #hostn sshould be httpforever.com
+            print('host: ', hostn)
+            file_path_list = message.split()[1].split('/'.encode('utf-8'))[3:]
+            print('file_path_list (L71): ', file_path_list)
             try:
                 # Connect to the socket to port 80
                 # Fill in start.
@@ -75,9 +81,14 @@ while 1:
                 # for the file requested by the client
                 fileobj = c.makefile('rwb', 0)
                 # [cite_start]Corrected this line based on the PDF [cite: 112-116]
-                print('file_path: ', file_path)
-                fileobj.write(f"GET /{file_path} HTTP/1.1\r\nHost: {hostn}\r\nConnection: close\r\n\r\n".encode('utf-8'))
+                if len(file_path_list) > 1:
+                    file_path = reduce(lambda x, y: x.decode('utf-8') + "/" + y.decode('utf-8'), file_path_list)
+                else:
+                    file_path = file_path_list[0].decode('utf-8')
 
+                print('file_path: ', file_path)
+                print('------------------------------------------------------------------------')
+                fileobj.write(f"GET /{file_path} HTTP/1.1\r\nHost: {hostn}\r\nConnection: close\r\n\r\n".encode('utf-8'))
                 # Read the response into buffer
                 # Fill in start.
                 buffer = fileobj.read()
@@ -86,10 +97,10 @@ while 1:
                 # Create a new file in the cache for the requested file.
                 # Also send the response in the buffer to client socket
                 # and the corresponding file in the cache
-                tmpFile = open("./" + hostn,"wb")
+                tmpFile = open("./" + hostn + " " + file_path.replace('/' , " "),"wb")
                 # Fill in start.
-                tcpCliSock.sendall(buffer)
                 tmpFile.write(buffer)
+                tcpCliSock.sendall(buffer)
                 c.close()
                 # Fill in end.
             except:
