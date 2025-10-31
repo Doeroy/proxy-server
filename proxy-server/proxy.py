@@ -22,11 +22,10 @@ tcpSerSock.listen(1)
 
 while 1:
     print('Ready to serve...')
-    tcpCliSock, addr = tcpSerSock.accept()
+    tcpCliSock, addr = tcpSerSock.accept() 
     print('Received a connection from:', addr)
-
     message = b""
-    while True:
+    while True: #recieves all the data from the user and adds it to message
         data = tcpCliSock.recv(4096)
         message += data
         if "\r\n\r\n".encode("utf-8") in message:
@@ -36,41 +35,47 @@ while 1:
     print('------------------------------------------------------------------------')
     print(f'filename: {filename}')
     fileExist = False
-    filetouse = "/" + filename
+    filetouse = "/" + filename.replace('/', " ") #replaces slashes with spaces for file names
     print('File to use:', filetouse)
     try:
         f = open(filetouse[1:], "rb")
         outputdata = f.read()
         f.close()
         fileExist = True
-        # Send the cached response (which already has headers)
         tcpCliSock.sendall(outputdata)
         print('Read from cache')
     except IOError:
         if fileExist == False:
             c = socket(AF_INET, SOCK_STREAM)
-            li = filename.replace("www.","",1).rstrip('/').split('/', 1)
+            #li contains the hostname and potenial file paths
+            li = filename.replace("www.","",1).rstrip('/').split('/', 1) 
             hostn = li[0]
-            if len(li) > 1:
+            if len(li) > 1: 
                 file_path = li[1]
             else:
                 file_path = ''
             print('hostn: ', hostn)
             print('file_path ', file_path)
             try:
+                #created an additonal socket to communicate with the webpage
                 c.connect((hostn ,80)) 
                 fileobj = c.makefile('rwb', 0)
                 print('------------------------------------------------------------------------')
                 fileobj.write(f"GET /{file_path} HTTP/1.0\r\nHost: {hostn}\r\nConnection: close\r\n\r\n".encode('utf-8'))
+                #reads the message obtained from the get request and puts it into a buffer
+                #that sends message to the user
                 buffer = fileobj.read()
                 print(f'{buffer}')
                 tcpCliSock.sendall(buffer)
                 c.close()
                 try:
+                    #creates the new file name for the file
                     cache_path = "./" + filetouse
                     cache_dir = os.path.dirname(cache_path)
+                    #if the directory does not exist then we create it
                     if cache_dir and not os.path.exists(cache_dir):
                         os.makedirs(cache_dir)
+                    #create the new file and write the message that is inside the buffer
                     tmpFile = open(cache_path, "wb")
                     tmpFile.write(buffer)
                     tmpFile.close()
